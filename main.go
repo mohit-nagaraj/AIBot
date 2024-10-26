@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -29,4 +31,23 @@ func main() {
 	// using go to run the function in different thread (separate from the main thread)
 	go printCommandEvents(bot.CommandEvents())
 
+	/*
+	* mechanism in Go to manage and propagate cancellation signals across goroutines
+	* creates a Context and an associated cancel function
+	 */
+	ctx, cancel := context.WithCancel(context.Background())
+	/*
+	* context.Background() provides a base Context (often used as a root context).
+	* WithCancel wraps this base Context, creating a new Context that can be canceled by calling the cancel function. The cancel function will stop any goroutines or processes using this Context when called.
+	* defer cancel is called when main func ends
+	 */
+	defer cancel()
+	/*
+	*  It will propagate a "cancellation signal" if the cancel function is called. The ctx is passed to bot.Listen(ctx) to give the bot listening function the ability to react if ctx is canceled.
+	 */
+	err := bot.Listen(ctx)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 }
