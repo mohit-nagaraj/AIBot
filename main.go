@@ -31,6 +31,23 @@ func main() {
 	// using go to run the function in different thread (separate from the main thread)
 	go printCommandEvents(bot.CommandEvents())
 
+	bot.Command("momo - <message>", &slacker.CommandDefinition{
+		// below are the default things in slacker library
+		Description: "send any question to wolfram",
+		Examples:    []string{"who is the president of india"},
+		/*
+		* botCtx is the context of the bot
+		* request is the request that the bot receives
+		* response is the response that the bot sends
+		 */
+		Handler: func(botCtx slacker.BotContext, request slacker.Request, response slacker.ResponseWriter) {
+			// param message is coming from the command definition
+			query := request.Param("message")
+			fmt.Println("Query: ", query)
+			response.Reply("Searching for the answer...")
+		},
+	})
+
 	/*
 	* mechanism in Go to manage and propagate cancellation signals across goroutines
 	* creates a Context and an associated cancel function
