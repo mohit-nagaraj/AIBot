@@ -1,0 +1,5 @@
+# environment files
+.env
+
+# binary files
+go.sum
