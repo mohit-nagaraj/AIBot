@@ -1,5 +1,6 @@
 # AIBot
 AIBot - Wit.Ai 💬+ Wolfram🐺 + Golang 🔥+ Slack 🤖
+![image](https://github.com/user-attachments/assets/cd8c0a96-64e8-4603-bbac-e163a3253dc9)
 
 ## Architecture
 ![image](https://github.com/user-attachments/assets/dac9fb02-4604-46f3-a054-6b2ca7cf0bb9)
