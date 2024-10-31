@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 
+	"github.com/Edw590/go-wolfram"
 	"github.com/joho/godotenv"
 	"github.com/shomali11/slacker"
+	"github.com/tidwall/gjson"
+
+	witai "github.com/wit-ai/wit-go/v2"
 )
 
-// funtion to printout the slack events tht occur
-// chan *slacker.CommandEvent is a channel that receives a pointer to a CommandEvent
+// Function to print out the Slack events that occur
 func printCommandEvents(analyticsChannel <-chan *slacker.CommandEvent) {
 	for event := range analyticsChannel {
 		fmt.Println("Command Events")
@@ -19,52 +23,77 @@ func printCommandEvents(analyticsChannel <-chan *slacker.CommandEvent) {
 		fmt.Println(event.Command)
 		fmt.Println(event.Parameters)
 		fmt.Println(event.Event)
-		fmt.Println()
 	}
 }
 
 func main() {
-	godotenv.Load(".env")
+	// Load environment variables from .env file
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 
 	bot := slacker.NewClient(os.Getenv("SLACK_BOT_TOKEN"), os.Getenv("SLACK_APP_TOKEN"))
+	client := witai.NewClient(os.Getenv("WIT_AI_TOKEN"))
+	wolframClient := &wolfram.Client{AppID: os.Getenv("WOLFRAM_APP_ID")}
 
-	// using go to run the function in different thread (separate from the main thread)
+	// Start a goroutine to print command events
 	go printCommandEvents(bot.CommandEvents())
 
+	// Define the command for the bot
 	bot.Command("momo - <message>", &slacker.CommandDefinition{
-		// below are the default things in slacker library
-		Description: "send any question to wolfram",
-		Examples:    []string{"who is the president of india"},
-		/*
-		* botCtx is the context of the bot
-		* request is the request that the bot receives
-		* response is the response that the bot sends
-		 */
+		Description: "Send any question to Wolfram Alpha",
+		Examples:    []string{"who is the president of India"},
 		Handler: func(botCtx slacker.BotContext, request slacker.Request, response slacker.ResponseWriter) {
-			// param message is coming from the command definition
+			// Get the message parameter from the command
 			query := request.Param("message")
-			fmt.Println("Query: ", query)
-			response.Reply("Searching for the answer...")
+			fmt.Printf("Received query: %v\n", query)
+
+			// Process the query with Wit.ai
+			msg, err := client.Parse(&witai.MessageRequest{Query: query})
+			if err != nil {
+				log.Printf("Error parsing message with Wit.ai: %v", err)
+				response.Reply("Sorry, I couldn't process your request.")
+				return
+			}
+
+			// Print the parsed message for debugging
+			data, _ := json.MarshalIndent(msg, "", "    ")
+			rough := string(data)
+			fmt.Printf("Wit.ai response: %s\n", rough)
+
+			// Check for the Wolfram query in entities
+			value := gjson.Get(rough, "entities.wit$wolfram_search_query:wolfram_search_query.0.value")
+			answer := value.String()
+
+			// If no relevant entity is found, use the text from the Wit.ai response
+			if answer == "" {
+				answer = msg.Text // Use the full text instead
+			}
+
+			if answer == "" {
+				response.Reply("I couldn't find a question to ask Wolfram Alpha.")
+				return
+			}
+
+			// Query Wolfram Alpha
+			res, err := wolframClient.GetSpokentAnswerQuery(answer, wolfram.Metric, 1000)
+			if err != nil {
+				log.Printf("Error fetching from Wolfram Alpha: %v", err)
+				response.Reply("Sorry, there was an error retrieving the answer from Wolfram Alpha.")
+				return
+			}
+
+			// Send the response back to Slack
+			response.Reply(res)
 		},
 	})
 
-	/*
-	* mechanism in Go to manage and propagate cancellation signals across goroutines
-	* creates a Context and an associated cancel function
-	 */
+	// Create a context for the bot
 	ctx, cancel := context.WithCancel(context.Background())
-	/*
-	* context.Background() provides a base Context (often used as a root context).
-	* WithCancel wraps this base Context, creating a new Context that can be canceled by calling the cancel function. The cancel function will stop any goroutines or processes using this Context when called.
-	* defer cancel is called when main func ends
-	 */
 	defer cancel()
-	/*
-	*  It will propagate a "cancellation signal" if the cancel function is called. The ctx is passed to bot.Listen(ctx) to give the bot listening function the ability to react if ctx is canceled.
-	 */
-	err := bot.Listen(ctx)
 
-	if err != nil {
+	// Start listening for commands
+	if err := bot.Listen(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
